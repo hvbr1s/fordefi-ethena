@@ -26,8 +26,8 @@ export const fordefiConfig: FordefiProviderConfig = {
 };
 
 export const mintOrder: MintOrder = {
-  amount: 1,
-  collateralAsset: "USDC",
+  amount: 10000,
+  collateralAsset: "USDT",
   benefactor: checksumAddress(
     fordefiConfig.address
   ) as Address,

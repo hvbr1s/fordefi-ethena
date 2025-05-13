@@ -1,4 +1,4 @@
-import { Address, checksumAddress, createPublicClient, Hex, http } from "viem";
+import { createPublicClient, Hex, http } from "viem";
 import "dotenv/config";
 import {
   approve,
@@ -6,27 +6,20 @@ import {
   createMintOrder,
   getAllowance,
   getRfq,
-  signOrder,
   submitOrder,
   UINT256_MAX,
 } from "./mint_utils";
 import {
-  OrderSending,
-  OrderSigning,
-  Rfq,
   SignatureType,
   Signature,
 } from "./types";
 import { ETHENA_MINTING_ABI } from "./minting_abi";
 import { mainnet } from "viem/chains";
-import { parseScientificOrNonScientificToBigInt } from "./parse_number";
 import { Side } from "./types";
 import { fordefiConfig, mintOrder } from './config'
-import { setAllowance } from "./set-allowance";
 import { getProvider } from './get-provider';
 import {
   DOMAIN,
-  ETHENA_URL,
   RPC_URL,
   MINT_ADDRESS,
   ORDER_TYPE,
@@ -36,6 +29,7 @@ const publicClient = createPublicClient({
   chain: mainnet,
   transport: http(RPC_URL)
 });
+const ALLOW_INFINITE_APPROVALS = false;
 
 async function main() {
   try {
@@ -44,6 +38,8 @@ async function main() {
         throw new Error("Failed to initialize provider");
     }
     const signer = provider.getSigner();
+
+    const collateralAssetAddress = mintOrder.collateralAddresses[mintOrder.collateralAsset]
 
     // Get RFQ
     const pair = `${mintOrder.collateralAsset}/USDe`;
@@ -56,10 +52,49 @@ async function main() {
       rfqData,
       mintOrder.benefactor,
       mintOrder.benefactor, // Using same address for beneficiary
-      mintOrder.collateralAddresses[mintOrder.collateralAsset]
+      collateralAssetAddress
     );
 
     console.log("Order", order);
+
+    // Get allowance
+    const allowance = await getAllowance(collateralAssetAddress, fordefiConfig.address);
+    console.log("Allowance", allowance);
+
+    // Determine if approval required
+    if (allowance < bigIntAmount(mintOrder.amount)) {
+      // Approving
+      let txHash: Hex;
+
+      // Reset allowance for USDT before approving
+      if (mintOrder.collateralAsset === "USDT" && allowance > 0) {
+        const revokeTxHash = await approve(
+          collateralAssetAddress,
+          signer,
+          bigIntAmount(0)
+        );
+        await publicClient.waitForTransactionReceipt({
+          hash: revokeTxHash,
+          confirmations: 1,
+        });
+        console.log(
+          `Revoke submitted: https://etherscan.io/tx/${revokeTxHash}`
+        );
+      }
+
+      txHash = await approve(
+        collateralAssetAddress,
+        signer,
+        ALLOW_INFINITE_APPROVALS ? UINT256_MAX : bigIntAmount(mintOrder.amount)
+      );
+      console.log(`Approval submitted: https://etherscan.io/tx/${txHash}`);
+
+      // Wait for the transaction to be mined
+      await publicClient.waitForTransactionReceipt({
+        hash: txHash,
+        confirmations: 1,
+      });
+    }
 
     const orderForSigning = {
       ...order,
