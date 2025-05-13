@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "mint": "npx ts-node src/mint.ts"
+    "ethena": "npx ts-node src/ethena.ts"
   },
   "keywords": [],
   "author": "",

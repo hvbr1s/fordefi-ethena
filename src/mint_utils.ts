@@ -57,6 +57,7 @@ export async function createMintOrder(
     usde_amount: rfqData.usde_amount,
   };
 }
+import { ethers } from 'ethers';
 
 export async function signOrder(
   order: OrderSigning,
@@ -102,25 +103,18 @@ export async function getAllowance(
 
 export async function approve(
   collateralAddress: `0x${string}`,
-  privateKey: string,
+  signer: ethers.providers.JsonRpcSigner,
   amount: bigint
 ) {
-  const account = privateKeyToAccount(privateKey as `0x${string}`);
-
-  const walletClient = createWalletClient({
-    chain: mainnet,
-    transport: http(process.env.RPC_URL as string),
-  });
-
-  const txHash = await walletClient.writeContract({
-    account,
-    chain: mainnet,
-    address: collateralAddress,
-    abi: erc20Abi,
-    functionName: "approve",
-    args: [MINT_ADDRESS, amount],
-  });
-  return txHash;
+  // Use ethers.js contract interaction instead of viem's writeContract
+  const erc20Contract = new ethers.Contract(
+    collateralAddress,
+    erc20Abi,
+    signer
+  );
+  
+  const txResponse = await erc20Contract.approve(MINT_ADDRESS, amount);
+  return txResponse.hash;
 }
 
 export function bigIntAmount(amount: number) {
